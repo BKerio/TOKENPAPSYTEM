@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
+use App\Models\Meter;
+use App\Models\TokenTransaction;
 use App\Services\MpesaService;
 use App\Services\PaymentSmsService;
+use App\Services\PrismTokenService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +18,13 @@ class MpesaController extends Controller
 {
     protected MpesaService $mpesa;
     protected PaymentSmsService $paymentSmsService;
+    protected PrismTokenService $prismTokenService;
 
-    public function __construct(MpesaService $mpesa, PaymentSmsService $paymentSmsService)
+    public function __construct(MpesaService $mpesa, PaymentSmsService $paymentSmsService, PrismTokenService $prismTokenService)
     {
         $this->mpesa = $mpesa;
         $this->paymentSmsService = $paymentSmsService;
+        $this->prismTokenService = $prismTokenService;
     }
 
     /**
@@ -155,21 +160,77 @@ class MpesaController extends Controller
                         'account_reference' => $accountReference,
                     ]);
 
-                    // Send confirmation SMS
+                    // Send confirmation SMS or Tokens
                     try {
-                        $smsSent = $this->paymentSmsService->sendPaymentConfirmation($payment);
+                        $meter = Meter::where('meter_number', $accountReference)->first();
+                        
+                        if ($meter) {
+                            Log::info('Vending token for M-Pesa payment', [
+                                'meter_id' => $meter->id,
+                                'amount' => $amount
+                            ]);
 
-                        if ($smsSent) {
-                            Log::info('Payment confirmation SMS sent successfully', [
-                                'payment_id' => $payment->id,
-                            ]);
+                            try {
+                                $generatedTokens = $this->prismTokenService->issueCreditToken($meter, $amount);
+                                
+                                $tokenStrings = [];
+                                foreach ($generatedTokens as $token) {
+                                    if (isset($token->tokenDec)) {
+                                        $tokenStrings[] = $token->tokenDec;
+                                    } elseif (isset($token->tokenHex)) {
+                                        $tokenStrings[] = $token->tokenHex;
+                                    }
+                                }
+
+                                TokenTransaction::create([
+                                    'meter_id' => $meter->id,
+                                    'vendor_id' => $meter->vendor_id ?? null,
+                                    'customer_id' => $meter->customers()->first()->id ?? null,
+                                    'amount' => $amount,
+                                    'tokens' => $tokenStrings,
+                                    'status' => 'success',
+                                    'description' => 'M-Pesa payment generated ' . count($tokenStrings) . ' token(s).'
+                                ]);
+
+                                $smsSent = $this->paymentSmsService->sendTokenMessage($payment, $meter, $tokenStrings);
+                                
+                                if ($smsSent) {
+                                    Log::info('Token SMS sent successfully via M-Pesa flow', ['payment_id' => $payment->id]);
+                                }
+
+                            } catch (\Exception $e) {
+                                Log::error('Token generation failed in M-Pesa callback: ' . $e->getMessage(), [
+                                    'payment_id' => $payment->id,
+                                    'meter_id' => $meter->id
+                                ]);
+                                
+                                TokenTransaction::create([
+                                    'meter_id' => $meter->id,
+                                    'vendor_id' => $meter->vendor_id ?? null,
+                                    'amount' => $amount,
+                                    'status' => 'failed',
+                                    'description' => 'Prism/System Error: ' . $e->getMessage()
+                                ]);
+
+                                // Fallback to basic payment confirmation if vending fails
+                                $this->paymentSmsService->sendPaymentConfirmation($payment);
+                            }
                         } else {
-                            Log::warning('Payment confirmation SMS failed to send', [
-                                'payment_id' => $payment->id,
-                            ]);
+                            // Basic payment confirmation if meter is not found
+                            $smsSent = $this->paymentSmsService->sendPaymentConfirmation($payment);
+
+                            if ($smsSent) {
+                                Log::info('Payment confirmation SMS sent successfully', [
+                                    'payment_id' => $payment->id,
+                                ]);
+                            } else {
+                                Log::warning('Payment confirmation SMS failed to send', [
+                                    'payment_id' => $payment->id,
+                                ]);
+                            }
                         }
                     } catch (\Throwable $e) {
-                        Log::error('Failed to send payment confirmation SMS', [
+                        Log::error('Failed to process post-payment tasks', [
                             'payment_id' => $payment->id,
                             'error' => $e->getMessage(),
                         ]);
