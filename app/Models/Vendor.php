@@ -4,6 +4,8 @@ namespace App\Models;
 
 use MongoDB\Laravel\Eloquent\DocumentModel;
 use MongoDB\Laravel\Eloquent\Model;
+use App\Models\MpesaConfig;
+use App\Models\SmsConfig;
 
 class Vendor extends Model
 {
@@ -32,6 +34,22 @@ class Vendor extends Model
         'mpesa_config' => 'array',
         'dashboard_settings' => 'array',
     ];
+
+    /**
+     * Get the MPESA configuration for this vendor.
+     */
+    public function mpesaConfig()
+    {
+        return $this->hasOne(MpesaConfig::class);
+    }
+
+    /**
+     * Get the SMS configuration for this vendor.
+     */
+    public function smsConfig()
+    {
+        return $this->hasOne(SmsConfig::class);
+    }
 
     /**
      * Get the user that owns the vendor.

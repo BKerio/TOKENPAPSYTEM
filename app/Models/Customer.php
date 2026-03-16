@@ -1,16 +1,20 @@
 <?php
 
 namespace App\Models;
-
-use MongoDB\Laravel\Eloquent\Model as DocumentModel;
+ 
+use MongoDB\Laravel\Auth\User as Authenticatable;
+use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Notifications\Notifiable;
 
-class Customer extends DocumentModel
+class Customer extends Authenticatable
 {
-    use HasFactory;
+    use HasFactory, HasApiTokens, Notifiable;
 
     protected $connection = 'mongodb';
-    protected $collection = 'customers';
+    protected $table = 'customers';
+    protected $primaryKey = '_id';
+    protected $keyType = 'string';
 
     protected $fillable = [
         'vendor_id',
@@ -23,6 +27,11 @@ class Customer extends DocumentModel
         'constituency_id',
         'ward_id',
         'status',
+        'role',
+    ];
+
+    protected $attributes = [
+        'role' => 'customer',
     ];
 
     public function vendor()

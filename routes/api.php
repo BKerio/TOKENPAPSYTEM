@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\SystemConfigController;
 use App\Http\Controllers\Api\VendingController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\TokenController;
+use App\Http\Controllers\Api\MpesaConfigController;
+use App\Http\Controllers\Api\SmsConfigController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +23,10 @@ use App\Http\Controllers\Api\TokenController;
 
 // Public routes
 Route::post('/admin/login', [AuthController::class, 'login']);
+Route::post('/customer/send-otp', [AuthController::class, 'sendCustomerOtp']);
+Route::post('/customer/login-otp', [AuthController::class, 'customerLoginOtp']);
+Route::get('/auth/google/redirect', [AuthController::class, 'redirectToGoogle']);
+Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 Route::post('/mpesa/stkpush', [MpesaController::class, 'stkPush']);
 Route::post('/mpesa/callback', [MpesaController::class, 'callback']);
 
@@ -52,6 +58,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // Authenticated vendor configuration (per-vendor Mpesa/SMS)
     Route::get('vendor/config', [VendorController::class, 'getConfig']);
     Route::put('vendor/config', [VendorController::class, 'updateConfig']);
+
+    // New separate config routes
+    Route::get('vendor/mpesa-config', [MpesaConfigController::class, 'show']);
+    Route::put('vendor/mpesa-config', [MpesaConfigController::class, 'update']);
+    Route::get('vendor/sms-config', [SmsConfigController::class, 'show']);
+    Route::put('vendor/sms-config', [SmsConfigController::class, 'update']);
+
     // Vendor profile and branding
     Route::get('vendor/profile', [VendorController::class, 'getProfile']);
     Route::put('vendor/profile', [VendorController::class, 'updateProfile']);

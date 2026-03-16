@@ -4,12 +4,62 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Customer;
+use App\Models\Otp;
+use App\Services\SmsService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
+    /**
+     * Redirect the user to the Google authentication page.
+     */
+    public function redirectToGoogle()
+    {
+        return Socialite::driver('google')->stateless()->redirect();
+    }
+
+    /**
+     * Obtain the user information from Google.
+     */
+    public function handleGoogleCallback()
+    {
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+            
+            // Search for customer by email
+            $customer = Customer::where('email', $googleUser->getEmail())->first();
+
+            if (!$customer) {
+                // Determine if we should create a new customer or error out
+                // For now, let's assume they must be pre-onboarded
+                $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+                return redirect($frontendUrl . '/login?error=' . urlencode('Your Google account is not associated with any onboarded customer profile.'));
+            }
+
+            // Create token
+            $token = $customer->createToken('customer-google-token')->plainTextToken;
+
+            // Redirect back to frontend with token
+            // We'll use a placeholder URL, but ideally this would be configurable
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            return redirect($frontendUrl . '/login?token=' . $token . '&user=' . urlencode(json_encode([
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'email' => $customer->email,
+                'phone' => $customer->phone,
+                'role' => 'customer',
+            ])));
+
+        } catch (\Exception $e) {
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            return redirect($frontendUrl . '/login?error=' . urlencode('Failed to authenticate with Google: ' . $e->getMessage()));
+        }
+    }
     /**
      * Admin login
      */
@@ -101,6 +151,7 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         $user = $request->user();
+        \Log::info('Entering me() method', ['user' => $user ? $user->toArray() : 'null']);
 
         $vendorType = null;
         if ($user->role === 'vendor') {
@@ -110,18 +161,33 @@ class AuthController extends Controller
             }
         }
 
-        return response()->json([
+        $data = [
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'username' => $user->username,
+                'phone' => $user->phone,
                 'role' => $user->role,
                 'profile_image' => $user->profile_image,
                 'bio' => $user->bio,
                 'vendor_type' => $vendorType,
             ]
-        ]);
+        ];
+
+        if ($user->role === 'customer') {
+            $user->load(['meter', 'vendor']);
+            $data['user']['meter'] = $user->meter;
+            $data['user']['vendor'] = $user->vendor;
+            
+            $transactions = \App\Models\TokenTransaction::where('meter_id', $user->meter_id)
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get();
+            $data['user']['recent_transactions'] = $transactions;
+        }
+
+        return response()->json($data);
     }
 
     /**
@@ -130,16 +196,32 @@ class AuthController extends Controller
     public function getAccount(Request $request)
     {
         $user = $request->user();
+        \Log::info('Entering getAccount() method', ['user' => $user ? $user->toArray() : 'null']);
         
-        return response()->json([
+        $data = [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'username' => $user->username,
+            'phone' => $user->phone,
             'role' => $user->role,
             'profile_image' => $user->profile_image,
             'bio' => $user->bio,
-        ]);
+        ];
+
+        if ($user->role === 'customer') {
+            $user->load(['meter', 'vendor']);
+            $data['meter'] = $user->meter;
+            $data['vendor'] = $user->vendor;
+            
+            $transactions = \App\Models\TokenTransaction::where('meter_id', $user->meter_id)
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get();
+            $data['recent_transactions'] = $transactions;
+        }
+
+        return response()->json($data);
     }
 
     /**
@@ -190,6 +272,112 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Password changed successfully'
+        ]);
+    }
+
+    /**
+     * Send OTP to customer
+     */
+    public function sendCustomerOtp(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required',
+        ]);
+
+        $phone = $request->phone;
+        $customer = Customer::where('phone', $phone)->first();
+
+        if (!$customer) {
+            return response()->json([
+                'message' => 'Customer with this phone number not found.'
+            ], 404);
+        }
+
+        // Generate 6-digit OTP
+        $otpCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        
+        // Store/Update OTP
+        Otp::updateOrCreate(
+            ['phone' => $phone],
+            [
+                'otp' => $otpCode,
+                'expires_at' => Carbon::now()->addMinutes(5)
+            ]
+        );
+
+        // Send SMS
+        $smsService = new SmsService();
+        $message = "Your Token Utility System verification code is: {$otpCode}. Valid for 5 minutes.";
+        
+        // Try to get vendor's SMS config
+        $vendorConfig = null;
+        if ($customer->vendor_id) {
+            $vendor = \App\Models\Vendor::find($customer->vendor_id);
+            if ($vendor) {
+                $vendorConfig = \App\Models\SmsConfig::where('vendor_id', $vendor->id)->first();
+            }
+        }
+
+        $sent = $smsService->sendSms($phone, $message, $vendorConfig ? $vendorConfig->toArray() : null);
+
+        if (!$sent) {
+            return response()->json([
+                'message' => 'Failed to send OTP. Please try again later.'
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'OTP sent successfully.'
+        ]);
+    }
+
+    /**
+     * Login customer via OTP
+     */
+    public function customerLoginOtp(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required',
+            'otp' => 'required|size:6',
+        ]);
+
+        $phone = $request->phone;
+        $otpCode = $request->otp;
+
+        $otpRecord = Otp::where('phone', $phone)
+            ->where('otp', $otpCode)
+            ->where('expires_at', '>', Carbon::now())
+            ->first();
+
+        if (!$otpRecord) {
+            return response()->json([
+                'message' => 'Invalid or expired OTP.'
+            ], 401);
+        }
+
+        $customer = Customer::where('phone', $phone)->first();
+        if (!$customer) {
+            return response()->json([
+                'message' => 'Customer not found.'
+            ], 404);
+        }
+
+        // Create token
+        $token = $customer->createToken('customer-token')->plainTextToken;
+
+        // Delete used OTP
+        $otpRecord->delete();
+
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'email' => $customer->email,
+                'phone' => $customer->phone,
+                'role' => 'customer',
+            ],
+            'status' => 200
         ]);
     }
 }
