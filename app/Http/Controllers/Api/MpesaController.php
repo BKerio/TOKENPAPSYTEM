@@ -193,8 +193,6 @@ class MpesaController extends Controller
                         ]);
                     }
 
-                    DB::beginTransaction();
-
                     $payment = Payment::create([
                         'merchant_request_id' => $merchantRequestId,
                         'checkout_request_id' => $checkoutRequestId,
@@ -206,8 +204,6 @@ class MpesaController extends Controller
                         'result_desc' => $resultDesc,
                         'status' => 'confirmed',
                     ]);
-
-                    DB::commit();
 
                     Log::info('Payment saved successfully', [
                         'payment_id' => $payment->id,
@@ -293,8 +289,6 @@ class MpesaController extends Controller
                         ]);
                     }
                 } catch (\Throwable $e) {
-                    DB::rollBack();
-
                     Log::error('Failed to persist successful STK callback', [
                         'checkout_request_id' => $checkoutRequestId,
                         'error' => $e->getMessage(),
@@ -328,18 +322,21 @@ class MpesaController extends Controller
             try {
                 $accountReference = $this->getAccountReference($checkoutRequestId);
 
-                Payment::updateOrCreate(
-                    ['checkout_request_id' => $checkoutRequestId],
-                    [
+                // Check if already exists to avoid duplicate
+                $existing = Payment::where('checkout_request_id', $checkoutRequestId)->first();
+                if (!$existing) {
+                    Payment::create([
                         'merchant_request_id' => $merchantRequestId,
+                        'checkout_request_id' => $checkoutRequestId,
                         'account_reference' => $accountReference,
                         'phone' => '',
                         'amount' => 0,
+                        'mpesa_receipt_number' => null,
                         'result_code' => (string) $resultCode,
                         'result_desc' => $resultDesc ?: $failureReason,
                         'status' => 'failed',
-                    ]
-                );
+                    ]);
+                }
             } catch (\Throwable $e) {
                 Log::error('Failed to persist failed STK callback', [
                     'checkout_request_id' => $checkoutRequestId,
@@ -368,13 +365,43 @@ class MpesaController extends Controller
             ]);
         }
 
-        return response()->json([
+        $responseData = [
             'status' => $payment->status, // 'confirmed' or 'failed'
             'amount' => $payment->amount,
             'result_code' => $payment->result_code,
             'result_desc' => $payment->result_desc,
             'mpesa_receipt' => $payment->mpesa_receipt_number,
-        ]);
+            'account_reference' => $payment->account_reference,
+        ];
+
+        // Add human-readable failure reason
+        if ($payment->status === 'failed') {
+            $resultCode = (int) $payment->result_code;
+            $responseData['failure_reason'] = match ($resultCode) {
+                1, 1032 => 'Transaction was cancelled by user',
+                2001 => 'Wrong M-Pesa PIN was entered',
+                2002 => 'Insufficient M-Pesa balance',
+                2003 => 'Transaction timed out. Please try again',
+                17 => 'A rule has declined this transaction. Check your M-Pesa limits',
+                26 => 'System is busy. Please try again later',
+                default => $payment->result_desc ?: 'Transaction failed. Please try again',
+            };
+        }
+
+        // Add token info for successful payments
+        if ($payment->status === 'confirmed' && $payment->account_reference) {
+            $tokenTx = TokenTransaction::where('meter_id', optional(Meter::where('meter_number', $payment->account_reference)->first())->id)
+                ->where('amount', $payment->amount)
+                ->where('status', 'success')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($tokenTx) {
+                $responseData['tokens'] = $tokenTx->tokens ?? [];
+            }
+        }
+
+        return response()->json($responseData);
     }
 
     /**

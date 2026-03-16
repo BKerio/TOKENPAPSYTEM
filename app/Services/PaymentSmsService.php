@@ -135,19 +135,25 @@ class PaymentSmsService
         $price = $meter->price_per_unit && $meter->price_per_unit > 0 ? $meter->price_per_unit : 1;
         $units = number_format($payment->amount / $price, 1);
 
-        $message = "TOKEN PURCHASE SUCCESSFUL\n\n";
-        $message .= "Meter: {$meter->meter_number}\n";
-        $message .= "Amount: KES {$amount}\n";
-        $message .= "Units: {$units} kWh\n\n";
-        
-        $message .= "TOKEN(S):\n";
-        foreach ($tokens as $token) {
-            // Format token grouping by 4 digits for readability
-            $formattedToken = trim(chunk_split($token, 4, '-'), '-');
-            $message .= "{$formattedToken}\n";
-        }
-        
-        $message .= "\nThank you.";
+        $message  = "Token purchase Successful\n\n";
+
+              $message .= "Mtr: {$meter->meter_number}\n";
+              
+              // Format tokens like 1234-5678-9012-3456
+              foreach ($tokens as $token) {
+                  $formattedToken = trim(chunk_split($token, 4, '-'), '-');
+                  $message .= "Token: {$formattedToken}\n";
+              }
+              $message .= "Date: " . date('Ymd H:i') . "\n";
+              $message .= "Units: {$units}\n";
+              $message .= "Amt: " . number_format($amount, 2) . "\n";
+              // Calculate token amount and other charges
+              $tokenAmount = $units * $price;
+              $otherCharges = $amount - $tokenAmount;
+              $message .= "TknAmt: " . number_format($tokenAmount, 2) . "\n";
+              $message .= "OtherCharges: " . number_format($otherCharges, 2) . "\n";
+              $message .= "\nFor details dial *367*878#";
+              $message .= "\nBest Regards,\nTokenPAP System";
 
         return $message;
     }

@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use MongoDB\Laravel\Eloquent\Model;
 
 class Payment extends Model
 {
-    use HasFactory;
+    protected $connection = 'mongodb';
+    protected $collection = 'payments';
 
     protected $fillable = [
         'merchant_request_id',
@@ -21,4 +21,3 @@ class Payment extends Model
         'status',
     ];
 }
-
