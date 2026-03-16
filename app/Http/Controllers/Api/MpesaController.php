@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Meter;
+use App\Models\Vendor;
 use App\Models\TokenTransaction;
 use App\Services\MpesaService;
 use App\Services\PaymentSmsService;
@@ -46,12 +47,68 @@ class MpesaController extends Controller
             'reference' => $reference,
         ]);
 
-        $response = $this->mpesa->stkPush($validated['phone'], (float) $validated['amount'], $reference);
+        $vendorConfig = null;
+        // Try to identify the vendor via the meter number (passed as reference)
+        if ($reference !== 'Payment') {
+            $meter = Meter::where('meter_number', $reference)->first();
+            if ($meter) {
+                Log::info('Meter found for STK Push', ['meter_number' => $reference, 'vendor_id' => $meter->vendor_id]);
+                if ($meter->vendor) {
+                    $vendor = $meter->vendor;
+                    if ($vendor->mpesaConfig) {
+                        $vendorConfig = $vendor->mpesaConfig->toArray();
+                        Log::info('Vendor M-Pesa config found', ['vendor_id' => $vendor->id]);
+                    } else {
+                        Log::warning('Vendor found but has no M-Pesa config', ['vendor_id' => $vendor->id]);
+                    }
+                } else {
+                    Log::warning('Meter found but has no associated vendor', ['meter_number' => $reference]);
+                }
+            } else {
+                Log::warning('Meter not found for STK Push reference', ['meter_number' => $reference]);
+            }
+        }
+
+        if ($vendorConfig) {
+            Log::info('Initiating STK Push with vendor-specific config');
+            
+            // Validate vendor config has required fields
+            $requiredFields = ['consumer_key', 'consumer_secret', 'passkey'];
+            $type = $vendorConfig['transaction_type'] ?? 'CustomerBuyGoodsOnline';
+            
+            if ($type === 'CustomerPayBillOnline') {
+                $requiredFields[] = 'shortcode';
+            } else {
+                $requiredFields[] = 'till_no';
+            }
+
+            foreach ($requiredFields as $field) {
+                if (empty($vendorConfig[$field])) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => "Vendor M-Pesa configuration is incomplete. Missing: $field",
+                    ], 400);
+                }
+            }
+
+            $response = $this->mpesa->stkPushWithConfig($vendorConfig, $validated['phone'], (float) $validated['amount'], $reference);
+        } else {
+            Log::info('Initiating STK Push with global M-Pesa config (fallback)');
+            $response = $this->mpesa->stkPush($validated['phone'], (float) $validated['amount'], $reference);
+        }
+
+        Log::info('M-Pesa API Response', ['response' => $response]);
 
         if (isset($response['errorCode']) || isset($response['errorMessage']) || (isset($response['ResponseCode']) && $response['ResponseCode'] !== '0')) {
+            $errorMessage = $response['errorMessage'] ?? ($response['customerMessage'] ?? 'M-Pesa API Error');
+            Log::error('M-Pesa STK Push failed', [
+                'error' => $errorMessage,
+                'full_response' => $response
+            ]);
+            
             return response()->json([
                 'status' => 'error',
-                'message' => $response['errorMessage'] ?? ($response['customerMessage'] ?? 'M-Pesa API Error'),
+                'message' => $errorMessage,
                 'response' => $response,
             ], 400);
         }

@@ -328,8 +328,8 @@ class SystemConfigController extends Controller
         // 2. Otherwise, if the authenticated user is a vendor, use their config
         if (!$vendorConfig && $user && $user->role === 'vendor') {
             $vendor = Vendor::where('user_id', $user->id)->first();
-            if ($vendor && $vendor->sms_config) {
-                $vendorConfig = $vendor->sms_config;
+            if ($vendor && $vendor->smsConfig) {
+                $vendorConfig = $vendor->smsConfig->toArray();
             }
         }
 
@@ -381,8 +381,8 @@ class SystemConfigController extends Controller
         // 2. Otherwise, if authenticated user is vendor, use their config
         if (!$vendorConfig && $user && $user->role === 'vendor') {
             $vendor = Vendor::where('user_id', $user->id)->first();
-            if ($vendor && $vendor->mpesa_config) {
-                $vendorConfig = $vendor->mpesa_config;
+            if ($vendor && $vendor->mpesaConfig) {
+                $vendorConfig = $vendor->mpesaConfig->toArray();
             }
         }
 

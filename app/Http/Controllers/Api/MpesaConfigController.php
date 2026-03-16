@@ -58,12 +58,15 @@ class MpesaConfigController extends Controller
             'transaction_type' => 'sometimes|nullable|string|in:CustomerPayBillOnline,CustomerBuyGoodsOnline',
         ]);
 
-        $configData = array_filter($validated, function($value) {
-            return $value !== null && $value !== '';
+        $configData = array_filter($request->only([
+            'consumer_key', 'consumer_secret', 'passkey', 'shortcode', 
+            'till_no', 'env', 'callback_url', 'transaction_type'
+        ]), function($value) {
+            return $value !== null && $value !== '' && $value !== 'is_set';
         });
 
         foreach (['consumer_key', 'consumer_secret', 'passkey'] as $key) {
-            if (isset($configData[$key])) {
+            if (isset($configData[$key]) && $configData[$key] !== 'is_set') {
                 $configData[$key] = Crypt::encryptString($configData[$key]);
             }
         }

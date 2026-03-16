@@ -43,4 +43,12 @@ class Customer extends Authenticatable
     {
         return $this->belongsTo(Meter::class);
     }
+
+    /**
+     * Get the role attribute.
+     */
+    public function getRoleAttribute($value)
+    {
+        return $value ?: 'customer';
+    }
 }

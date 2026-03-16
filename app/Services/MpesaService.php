@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\SystemConfig;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Crypt;
 
 class MpesaService
 {
@@ -48,17 +50,31 @@ class MpesaService
         $timestamp = now()->format('YmdHis');
         $password  = base64_encode($this->shortcode . $this->passkey . $timestamp);
 
-        $token = $this->getAccessToken();
+        Log::info('Generating Global M-Pesa Access Token', ['baseUrl' => $this->baseUrl]);
+        $responseToken = Http::withBasicAuth(trim($this->consumerKey), trim($this->consumerSecret))
+            ->get($this->baseUrl . '/oauth/v1/generate?grant_type=client_credentials');
+
+        if ($responseToken->failed()) {
+            Log::error('Failed to generate Global M-Pesa Access Token', [
+                'status' => $responseToken->status(),
+                'response' => $responseToken->json()
+            ]);
+            return $responseToken->json() ?: ['errorMessage' => 'Failed to generate global access token'];
+        }
+
+        $tokenData = $responseToken->json();
+        $token = $tokenData['access_token'] ?? null;
 
         $transactionType = SystemConfig::getValue('mpesa_transaction_type', 'CustomerBuyGoodsOnline');
         $partyB = ($transactionType === 'CustomerPayBillOnline') ? $this->shortcode : $this->tillno;
 
+        $reference = substr($reference, 0, 12);
         $payload = [
             'BusinessShortCode' => $this->shortcode,
             'Password'          => $password,
             'Timestamp'         => $timestamp,
             'TransactionType'   => $transactionType,
-            'Amount'            => $amount,
+            'Amount'            => (int) $amount, // Round to int for safety
             'PartyA'            => $phone,
             'PartyB'            => $partyB,
             'PhoneNumber'       => $phone,
@@ -67,10 +83,18 @@ class MpesaService
             'TransactionDesc'   => $reference,
         ];
 
+        Log::info('Sending Global STK Push Process Request', ['url' => $this->baseUrl . '/mpesa/stkpush/v1/processrequest']);
         $response = Http::withToken($token)
             ->post($this->baseUrl . '/mpesa/stkpush/v1/processrequest', $payload);
 
-        return $response->json();
+        if ($response->failed()) {
+            Log::error('Global M-Pesa STK Push Process Request failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
+        }
+
+        return $response->json() ?: ['errorMessage' => 'Empty or invalid response from M-Pesa API', 'status' => $response->status()];
     }
 
     /**
@@ -98,14 +122,25 @@ class MpesaService
         $timestamp = now()->format('YmdHis');
         $password  = base64_encode($shortcode . $passkey . $timestamp);
 
-        $responseToken = Http::withBasicAuth($consumerKey, $consumerSecret)
+        Log::info('Generating M-Pesa Access Token', ['baseUrl' => $baseUrl]);
+        $responseToken = Http::withBasicAuth(trim($consumerKey), trim($consumerSecret))
             ->get($baseUrl . '/oauth/v1/generate?grant_type=client_credentials');
 
-        $token = $responseToken->json()['access_token'] ?? null;
+        if ($responseToken->failed()) {
+            Log::error('Failed to generate M-Pesa Access Token', [
+                'status' => $responseToken->status(),
+                'response' => $responseToken->json()
+            ]);
+            return $responseToken->json() ?: ['errorMessage' => 'Failed to generate access token'];
+        }
+
+        $tokenData = $responseToken->json();
+        $token = $tokenData['access_token'] ?? null;
 
         $transactionType = $config['transaction_type'] ?? SystemConfig::getValue('mpesa_transaction_type', 'CustomerBuyGoodsOnline');
         $partyB = ($transactionType === 'CustomerPayBillOnline') ? $shortcode : $tillno;
 
+        $reference = substr($reference, 0, 12);
         $payload = [
             'BusinessShortCode' => $shortcode,
             'Password'          => $password,
@@ -120,10 +155,18 @@ class MpesaService
             'TransactionDesc'   => $reference,
         ];
 
+        Log::info('Sending STK Push Process Request', ['url' => $baseUrl . '/mpesa/stkpush/v1/processrequest']);
         $response = Http::withToken($token)
             ->post($baseUrl . '/mpesa/stkpush/v1/processrequest', $payload);
 
-        return $response->json();
+        if ($response->failed()) {
+            Log::error('M-Pesa STK Push Process Request failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
+        }
+
+        return $response->json() ?: ['errorMessage' => 'Empty or invalid response from M-Pesa API', 'status' => $response->status()];
     }
 
     private function decryptIfSet(?string $value): ?string

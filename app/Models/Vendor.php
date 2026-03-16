@@ -52,6 +52,14 @@ class Vendor extends Model
     }
 
     /**
+     * Get the SMS credentials for this vendor.
+     */
+    public function smsCredentials()
+    {
+        return $this->hasMany(SmsCredential::class);
+    }
+
+    /**
      * Get the user that owns the vendor.
      */
     public function user()

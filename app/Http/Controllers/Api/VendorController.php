@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use App\Models\SmsConfig;
+use App\Models\MpesaConfig;
 
 class VendorController extends Controller
 {
@@ -205,22 +207,24 @@ class VendorController extends Controller
             ], 404);
         }
 
-        $smsConfig = $vendor->sms_config ?? [];
-        if (isset($smsConfig['api_key'])) {
-            $smsConfig['api_key'] = 'is_set';
+        $smsConfig = $vendor->smsConfig;
+        $smsConfigArray = $smsConfig ? $smsConfig->toArray() : [];
+        if (isset($smsConfigArray['api_key'])) {
+            $smsConfigArray['api_key'] = 'is_set';
         }
 
-        $mpesaConfig = $vendor->mpesa_config ?? [];
+        $mpesaConfig = $vendor->mpesaConfig;
+        $mpesaConfigArray = $mpesaConfig ? $mpesaConfig->toArray() : [];
         foreach (['consumer_key', 'consumer_secret', 'passkey'] as $k) {
-            if (isset($mpesaConfig[$k])) {
-                $mpesaConfig[$k] = 'is_set';
+            if (isset($mpesaConfigArray[$k])) {
+                $mpesaConfigArray[$k] = 'is_set';
             }
         }
 
         return response()->json([
             'status' => 200,
-            'sms_config' => $smsConfig,
-            'mpesa_config' => $mpesaConfig,
+            'sms_config' => $smsConfigArray,
+            'mpesa_config' => $mpesaConfigArray,
         ]);
     }
 
@@ -259,8 +263,14 @@ class VendorController extends Controller
             if (isset($smsData['api_key'])) {
                 $smsData['api_key'] = \Illuminate\Support\Facades\Crypt::encryptString($smsData['api_key']);
             }
-            $existingSmsConfig = $vendor->sms_config ?? [];
-            $vendor->sms_config = array_merge($existingSmsConfig, $smsData);
+            
+            $smsConfig = $vendor->smsConfig;
+            if ($smsConfig) {
+                $smsConfig->update($smsData);
+            } else {
+                $smsData['vendor_id'] = $vendor->id;
+                SmsConfig::create($smsData);
+            }
         }
 
         if (isset($data['mpesa_config'])) {
@@ -272,11 +282,15 @@ class VendorController extends Controller
                     $mpesaData[$key] = \Illuminate\Support\Facades\Crypt::encryptString($mpesaData[$key]);
                 }
             }
-            $existingMpesaConfig = $vendor->mpesa_config ?? [];
-            $vendor->mpesa_config = array_merge($existingMpesaConfig, $mpesaData);
+            
+            $mpesaConfig = $vendor->mpesaConfig;
+            if ($mpesaConfig) {
+                $mpesaConfig->update($mpesaData);
+            } else {
+                $mpesaData['vendor_id'] = $vendor->id;
+                MpesaConfig::create($mpesaData);
+            }
         }
-
-        $vendor->save();
 
         return response()->json([
             'status' => 200,
