@@ -1,0 +1,30 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/tokengenerator
+            git pull origin main
+            composer install --no-dev --no-interaction --optimize-autoloader
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan view:clear
+            php artisan route:clear
+            # Optional: php artisan migrate --force
