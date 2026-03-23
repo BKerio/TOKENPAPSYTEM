@@ -236,13 +236,14 @@ class MpesaController extends Controller
                                 }
 
                                 TokenTransaction::create([
-                                    'meter_id' => $meter->id,
-                                    'vendor_id' => $meter->vendor_id ?? null,
-                                    'customer_id' => $meter->customers()->first()->id ?? null,
-                                    'amount' => $amount,
-                                    'tokens' => $tokenStrings,
-                                    'status' => 'success',
-                                    'description' => 'M-Pesa payment generated ' . count($tokenStrings) . ' token(s).'
+                                    'meter_id'   => $meter->id,
+                                    'vendor_id'  => $meter->vendor_id ?? null,
+                                    'customer_id'=> $meter->customers()->first()->id ?? null,
+                                    'payment_id' => $payment->id,
+                                    'amount'     => $amount,
+                                    'tokens'     => $tokenStrings,
+                                    'status'     => 'success',
+                                    'description'=> 'M-Pesa payment generated ' . count($tokenStrings) . ' token(s).'
                                 ]);
 
                                 $smsSent = $this->paymentSmsService->sendTokenMessage($payment, $meter, $tokenStrings);
@@ -353,20 +354,51 @@ class MpesaController extends Controller
 
     /**
      * Check transaction status for a specific checkout request.
+     * Supports long polling via ?wait=1
      */
-    public function checkStatus($checkoutRequestId)
+    public function checkStatus(Request $request, $checkoutRequestId)
     {
-        $payment = Payment::where('checkout_request_id', $checkoutRequestId)->first();
+        $shouldWait = $request->query('wait', false);
+        $start = time();
+        $maxWait = $shouldWait ? 25 : 1; // 25 seconds for long poll, else immediate check
 
-        if (!$payment) {
-            return response()->json([
-                'status' => 'pending',
-                'message' => 'Transaction is still processing'
-            ]);
+        while (time() - $start < $maxWait) {
+            $payment = Payment::where('checkout_request_id', $checkoutRequestId)->first();
+
+            if ($payment) {
+                // Once payment exists, if it's confirmed, wait up to 5s for tokens if they aren't ready
+                if ($payment->status === 'confirmed') {
+                    $tokenStart = time();
+                    while (time() - $tokenStart < 5) {
+                        $responseData = $this->formatStatusResponse($payment);
+                        if (!empty($responseData['tokens'])) {
+                            return response()->json($responseData);
+                        }
+                        usleep(200000); // Check every 0.2 seconds for tokens
+                        $payment->refresh();
+                    }
+                }
+                
+                return response()->json($this->formatStatusResponse($payment));
+            }
+
+            if (!$shouldWait) break;
+            usleep(200000); // Check every 0.2 seconds for payment callback
         }
 
+        return response()->json([
+            'status' => 'pending',
+            'message' => 'Transaction is still processing'
+        ]);
+    }
+
+    /**
+     * Helper to format the status response consistently.
+     */
+    private function formatStatusResponse(Payment $payment): array
+    {
         $responseData = [
-            'status' => $payment->status, // 'confirmed' or 'failed'
+            'status' => $payment->status,
             'amount' => $payment->amount,
             'result_code' => $payment->result_code,
             'result_desc' => $payment->result_desc,
@@ -374,7 +406,6 @@ class MpesaController extends Controller
             'account_reference' => $payment->account_reference,
         ];
 
-        // Add human-readable failure reason
         if ($payment->status === 'failed') {
             $resultCode = (int) $payment->result_code;
             $responseData['failure_reason'] = match ($resultCode) {
@@ -388,20 +419,28 @@ class MpesaController extends Controller
             };
         }
 
-        // Add token info for successful payments
         if ($payment->status === 'confirmed' && $payment->account_reference) {
-            $tokenTx = TokenTransaction::where('meter_id', optional(Meter::where('meter_number', $payment->account_reference)->first())->id)
-                ->where('amount', $payment->amount)
+            $tokenTx = TokenTransaction::where('payment_id', $payment->id)
                 ->where('status', 'success')
-                ->orderBy('created_at', 'desc')
                 ->first();
+
+            if (!$tokenTx) {
+                $meter = Meter::where('meter_number', $payment->account_reference)->first();
+                if ($meter) {
+                    $tokenTx = TokenTransaction::where('meter_id', $meter->id)
+                        ->where('amount', $payment->amount)
+                        ->where('status', 'success')
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+                }
+            }
 
             if ($tokenTx) {
                 $responseData['tokens'] = $tokenTx->tokens ?? [];
             }
         }
 
-        return response()->json($responseData);
+        return $responseData;
     }
 
     /**

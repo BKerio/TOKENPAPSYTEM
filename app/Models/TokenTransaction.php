@@ -16,6 +16,7 @@ class TokenTransaction extends DocumentModel
         'meter_id',
         'vendor_id',
         'customer_id', // Optional, if linked to a specific customer's purchase
+        'payment_id',  // Links directly to the Payment record (checkout_request_id owner)
         'amount',
         'tokens', // Array of generated token strings
         'prism_message_id', // Useful for debugging or matching requests with Prism
