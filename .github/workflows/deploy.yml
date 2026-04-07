@@ -20,15 +20,30 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /var/www/tokengenerator
+            cd /var/www/TOKENPAPSYSTEM
+            
+            # Fetch latest changes from github
             git fetch origin master
             git reset --hard origin/master
             git clean -fd
-            # Fix Composer running as root
+            
+            # Use root safely for composer
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-dev --no-interaction --optimize-autoloader
+            
+            # Clear Laravel Caches and regenerate
             php artisan config:clear
             php artisan cache:clear
             php artisan view:clear
             php artisan route:clear
-            # php artisan migrate --force
+            php artisan optimize:clear
+            
+            # Run Migrations
+            php artisan migrate --force
+            
+            # Fix Ownership permissions for Nginx & PHP-FPM
+            chown -R nginx:nginx /var/www/TOKENPAPSYSTEM
+            chmod -R 777 storage bootstrap/cache
+            
+            # Restart Services to clear opcache safely
+            systemctl restart php-fpm
