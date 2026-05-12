@@ -69,7 +69,7 @@ class SmsService
             $body = (string) $response->getBody();
             $bodyArray = json_decode($body, true);
 
-            Log::info('SMS provider response!1', [
+            Log::info('SMS provider response', [
                 'status' => $response->getStatusCode(),
                 'body'   => $body,
                 'success' => $statusOk && (isset($bodyArray['success']) ? $bodyArray['success'] : $statusOk),
