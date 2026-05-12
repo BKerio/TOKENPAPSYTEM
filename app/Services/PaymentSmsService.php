@@ -67,7 +67,7 @@ class PaymentSmsService
             $phoneNumber = $this->normalizePhoneNumber($payment->phone);
 
             if (!$phoneNumber) {
-                Log::warning('Cannott send token SMS: invalid phone number', [
+                Log::warning('Cannot send token SMS: invalid phone number', [
                     'payment_id' => $payment->id ?? null,
                     'phone' => $payment->phone,
                 ]);
