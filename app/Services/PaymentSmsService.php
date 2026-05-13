@@ -59,7 +59,7 @@ class PaymentSmsService
     }
 
     /**
-     * Send an SMS with generated tokens to the custome.
+     * Send an SMS with generated tokens to the customer.
      */
     public function sendTokenMessage(Payment $payment, \App\Models\Meter $meter, array $tokens): bool
     {
