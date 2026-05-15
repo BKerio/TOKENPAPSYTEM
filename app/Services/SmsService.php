@@ -31,10 +31,31 @@ class SmsService
 
             // Get SMS configuration (vendor override then global defaults)
             $vendorApiKey = $this->decryptIfSet($vendorConfig['api_key'] ?? null);
+            
+            // 1. Resolve API Key
             $apiKey = $vendorApiKey ?? SystemConfig::getValue('sms_api_key');
+            if (!$apiKey || str_contains($apiKey, 'CHANGE_ME')) {
+                $apiKey = env('ADVANTA_API_KEY') ?? env('SMS_API_KEY');
+            }
+
+            // 2. Resolve Partner ID
             $partnerId = $vendorConfig['partner_id'] ?? SystemConfig::getValue('sms_partner_id');
+            if (!$partnerId || $partnerId === '4889') { // 4889 is the default from migration
+                $partnerId = env('ADVANTA_PARTNER_ID') ?? env('SMS_PARTNER_ID') ?? $partnerId;
+            }
+
+            // 3. Resolve Shortcode
             $shortcode = $vendorConfig['shortcode'] ?? SystemConfig::getValue('sms_shortcode');
+            if (!$shortcode || $shortcode === 'P.C.E.A_SGM') { // Default from migration
+                $shortcode = env('ADVANTA_SHORTCODE') ?? env('SMS_SHORTCODE') ?? $shortcode;
+            }
+
+            // 4. Resolve API URL
             $apiUrl = $vendorConfig['api_url'] ?? SystemConfig::getValue('sms_api_url');
+            if (!$apiUrl || str_contains($apiUrl, 'bulksms.fornax-technologies.com')) {
+                // If it's the default fornax URL but we have an advanta URL in env, use that
+                $apiUrl = env('ADVANTA_SMS_URL') ?? env('SMS_API_URL') ?? $apiUrl;
+            }
 
             if (!$apiKey || !$partnerId || !$shortcode || !$apiUrl) {
                 Log::error('SMS configuration is incomplete', [

@@ -33,7 +33,10 @@ class PaymentSmsService
 
             $message = $this->generatePaymentMessage($payment);
 
-            $success = $this->smsService->sendSms($phoneNumber, $message);
+            // Get vendor-specific config if available
+            $vendorConfig = $this->getVendorConfig($payment);
+
+            $success = $this->smsService->sendSms($phoneNumber, $message, $vendorConfig);
 
             if ($success) {
                 Log::info('Payment confirmation SMS sent successfully', [
@@ -75,7 +78,14 @@ class PaymentSmsService
             }
 
             $message = $this->generateTokenMessage($payment, $meter, $tokens);
-            $success = $this->smsService->sendSms($phoneNumber, $message);
+            
+            // Get vendor-specific config
+            $vendorConfig = null;
+            if ($meter->vendor) {
+                $vendorConfig = $meter->vendor->smsConfig ? $meter->vendor->smsConfig->toArray() : ($meter->vendor->sms_config ?: null);
+            }
+
+            $success = $this->smsService->sendSms($phoneNumber, $message, $vendorConfig);
 
             if ($success) {
                 Log::info('Token SMS sent successfully', [
@@ -156,6 +166,30 @@ class PaymentSmsService
               $message .= "\nBest Regards,\nTokenPAP System";
 
         return $message;
+    }
+
+    /**
+     * Get vendor configuration from payment.
+     */
+    protected function getVendorConfig(Payment $payment): ?array
+    {
+        try {
+            if (!$payment->account_reference) {
+                return null;
+            }
+
+            $meter = \App\Models\Meter::where('meter_number', $payment->account_reference)->first();
+            if ($meter && $meter->vendor) {
+                return $meter->vendor->smsConfig ? $meter->vendor->smsConfig->toArray() : ($meter->vendor->sms_config ?: null);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed to retrieve vendor config for payment SMS', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        return null;
     }
 
     /**
