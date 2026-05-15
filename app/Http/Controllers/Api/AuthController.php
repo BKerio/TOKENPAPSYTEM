@@ -190,9 +190,14 @@ class AuthController extends Controller
             $data['user']['meter'] = $user->meter;
             $data['user']['vendor'] = $user->vendor;
             
+            // Calculate total spent from all successful transactions
+            $data['user']['total_spent'] = \App\Models\TokenTransaction::where('meter_id', $user->meter_id)
+                ->where('status', 'success')
+                ->sum('amount');
+
             $transactions = \App\Models\TokenTransaction::where('meter_id', $user->meter_id)
                 ->orderBy('created_at', 'desc')
-                ->take(5)
+                ->take(20) // Increased limit
                 ->get();
             $data['user']['recent_transactions'] = $transactions;
         }
@@ -224,9 +229,14 @@ class AuthController extends Controller
             $data['meter'] = $user->meter;
             $data['vendor'] = $user->vendor;
             
+            // Calculate total spent from all successful transactions
+            $data['total_spent'] = \App\Models\TokenTransaction::where('meter_id', $user->meter_id)
+                ->where('status', 'success')
+                ->sum('amount');
+
             $transactions = \App\Models\TokenTransaction::where('meter_id', $user->meter_id)
                 ->orderBy('created_at', 'desc')
-                ->take(5)
+                ->take(20) // Increased limit
                 ->get();
             $data['recent_transactions'] = $transactions;
         }
