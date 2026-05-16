@@ -442,17 +442,6 @@ class MpesaController extends Controller
                 ->where('status', 'success')
                 ->first();
 
-            if (!$tokenTx) {
-                $meter = Meter::where('meter_number', $payment->account_reference)->first();
-                if ($meter) {
-                    $tokenTx = TokenTransaction::where('meter_id', $meter->id)
-                        ->where('amount', $payment->amount)
-                        ->where('status', 'success')
-                        ->orderBy('created_at', 'desc')
-                        ->first();
-                }
-            }
-
             if ($tokenTx) {
                 $responseData['tokens'] = $tokenTx->tokens ?? [];
             }
