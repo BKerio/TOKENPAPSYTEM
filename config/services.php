@@ -41,4 +41,10 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'ncba' => [
+        'username' => env('NCBA_PAYBILL_USERNAME', 'millicom'),
+        'password' => env('NCBA_PAYBILL_PASSWORD', ''),
+        'hash'     => env('NCBA_PAYBILL_HASH', ''),
+    ],
+
 ];

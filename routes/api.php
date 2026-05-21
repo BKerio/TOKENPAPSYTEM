@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\SmsConfigController;
 use App\Http\Controllers\Api\LandlordController;
 use App\Http\Controllers\Api\VendorRegistrationController;
 use App\Http\Controllers\Api\ContactEnquiryController;
+use App\Http\Controllers\Api\NcbaWebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,6 +42,9 @@ Route::get('/mpesa/query/{checkoutRequestId}', [MpesaController::class, 'checkSt
 Route::post('/enquiries', [ContactEnquiryController::class, 'store']);
 Route::post('/register/vendor', [VendorRegistrationController::class, 'register']);
 Route::get('/tokens/search', [TokenController::class, 'searchPublic']);
+
+// NCBA Paybill webhook (public — called by NCBA/TokenPap server)
+Route::post('/notifications/ncba', [NcbaWebhookController::class, 'handle']);
 
 // Protected routes (allow both default user tokens and admin tokens)
 Route::middleware('auth:sanctum')->group(function () {

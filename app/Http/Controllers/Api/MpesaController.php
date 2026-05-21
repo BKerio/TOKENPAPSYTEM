@@ -141,6 +141,11 @@ class MpesaController extends Controller
         $resultCode = (int) ($body['ResultCode'] ?? -1);
         $resultDesc = $body['ResultDesc'] ?? null;
 
+        $amount = 0.0;
+        $phone = 'UNKNOWN';
+        $mpesaReceipt = null;
+        $accountReference = null;
+
         Log::info('M-Pesa Callback received', [
             'checkout_request_id' => $checkoutRequestId,
             'merchant_request_id' => $merchantRequestId,
@@ -152,11 +157,7 @@ class MpesaController extends Controller
         // Only process successful transactions (ResultCode = 0)
         if ($resultCode === 0) {
             $items = $body['CallbackMetadata']['Item'] ?? [];
-
-            $amount = 0.0;
             $phone = '';
-            $mpesaReceipt = null;
-            $accountReference = null;
 
             foreach ($items as $item) {
                 switch ($item['Name'] ?? '') {
