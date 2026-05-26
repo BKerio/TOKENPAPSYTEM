@@ -8,7 +8,7 @@ use App\Services\PrismTokenService;
 class TestPrismToken extends Command
 {
     protected $signature = 'prism:test-token 
-                            {meter=600727000000000009} 
+                            {meter=47500162848} 
                             {amount=10}';
 
     protected $description = 'Test the integration of the Prism API by requesting a token.';
@@ -36,7 +36,7 @@ class TestPrismToken extends Command
 
             $dummyMeter = new \App\Models\Meter([
                 'meter_number' => $meterNumber,
-                'sgc' => 201457,
+                'sgc' => 600909,
                 'krn' => 1,
                 'ti' => 1,
                 'ea' => 7,
