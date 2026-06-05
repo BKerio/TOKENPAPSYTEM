@@ -76,8 +76,8 @@ class PrismTokenService
             $this->connect();
         }
 
-        $user = $username ?? env('PRISM_USERNAME', 'rezicom');
-        $pass = $password ?? env('PRISM_PASSWORD', 'hjN98Jk7');
+        $user = $username ?? env('PRISM_USERNAME', 'millicom');
+        $pass = $password ?? env('PRISM_PASSWORD', 'RGmWeoEB39dT3JYu');
 
         try {
             $signInResp = $this->client->signInWithPassword(
@@ -108,7 +108,7 @@ class PrismTokenService
         $drn = $meter->meter_number;
 
         // Fetch vending parameters from database with fallbacks from meter or hardcoded defaults
-        $sgc = \App\Models\VendingSetting::getValue('vending_sgc', (int) ($meter->sgc ?? 201457));
+        $sgc = \App\Models\VendingSetting::getValue('vending_sgc', (int) ($meter->sgc ?? 600909));
         $krn = \App\Models\VendingSetting::getValue('vending_krn', (int) ($meter->krn ?? 1));
         $ti  = \App\Models\VendingSetting::getValue('vending_ti', (int) ($meter->ti ?? 1));
         $ea  = \App\Models\VendingSetting::getValue('vending_ea', (int) ($meter->ea ?? 7));
