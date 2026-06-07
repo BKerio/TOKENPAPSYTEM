@@ -125,20 +125,24 @@ class NcbaWebhookController extends Controller
         }
 
         // ---------------------------------------------------------------
-        // 4. Resolve meter: try BillRefNumber first, then Narrative
+        // 4. Resolve meter from TillNumber#MeterNumber account reference
+        //    NCBA sends till in BillRefNumber and meter in Narrative, or
+        //    the combined "TillNumber#MeterNumber" in either field.
         // ---------------------------------------------------------------
-        $meter = null;
-        $meterRef = null;
+        $resolved   = $this->resolveMeterFromAccountRef($billRefNumber, $narrative);
+        $meter      = $resolved['meter'];
+        $meterRef   = $resolved['accountRef'];
+        $tillNumber = $resolved['tillNumber'];
+        $meterNumber = $resolved['meterNumber'];
 
-        if (!empty($billRefNumber)) {
-            $meter    = Meter::where('meter_number', $billRefNumber)->first();
-            $meterRef = $billRefNumber;
-        }
-
-        if (!$meter && !empty($narrative)) {
-            $meter    = Meter::where('meter_number', $narrative)->first();
-            $meterRef = $narrative;
-        }
+        Log::info('NCBA: Resolved account reference', [
+            'bill_ref'     => $billRefNumber,
+            'narrative'    => $narrative,
+            'till_number'  => $tillNumber,
+            'meter_number' => $meterNumber,
+            'account_ref'  => $meterRef,
+            'meter_found'  => (bool) $meter,
+        ]);
 
         // ---------------------------------------------------------------
         // 5. Store the payment transaction
@@ -175,13 +179,15 @@ class NcbaWebhookController extends Controller
         }
 
         // ---------------------------------------------------------------
-        // 6. Issue tokens & send SMS
+        // 6. Issue tokens & send SMS to the purchaser's phone (Mobile)
         // ---------------------------------------------------------------
+        try {
         if ($meter) {
             try {
                 Log::info('NCBA: Vending token', [
                     'meter_id' => $meter->id,
                     'amount'   => $amount,
+                    'phone'    => $mobile,
                 ]);
 
                 $generatedTokens = $this->prismTokenService->issueCreditToken($meter, $amount);
@@ -266,6 +272,9 @@ class NcbaWebhookController extends Controller
                 meter:         null
             );
         }
+        } finally {
+            $this->prismTokenService->disconnect();
+        }
 
         return response()->json([
             'status'  => 'success',
@@ -276,6 +285,66 @@ class NcbaWebhookController extends Controller
     // ---------------------------------------------------------------
     // Private helpers
     // ---------------------------------------------------------------
+
+    /**
+     * Parse NCBA account reference formats:
+     *   - "TillNumber#MeterNumber" in BillRefNumber or Narrative
+     *   - BillRefNumber = till, Narrative = meter (NCBA split format)
+     *   - meter number only (legacy fallback)
+     */
+    private function resolveMeterFromAccountRef(?string $billRefNumber, ?string $narrative): array
+    {
+        $billRefNumber = $billRefNumber ? trim($billRefNumber) : null;
+        $narrative     = $narrative ? trim($narrative) : null;
+
+        $tillNumber  = null;
+        $meterNumber = null;
+
+        foreach ([$billRefNumber, $narrative] as $ref) {
+            if ($ref && str_contains($ref, '#')) {
+                [$tillNumber, $meterNumber] = array_pad(explode('#', $ref, 2), 2, null);
+                $tillNumber  = $tillNumber ? trim($tillNumber) : null;
+                $meterNumber = $meterNumber ? trim($meterNumber) : null;
+                break;
+            }
+        }
+
+        if (!$meterNumber && $billRefNumber && $narrative) {
+            $tillNumber  = $billRefNumber;
+            $meterNumber = $narrative;
+        } elseif (!$meterNumber && $billRefNumber) {
+            $meterNumber = $billRefNumber;
+        } elseif (!$meterNumber && $narrative) {
+            $meterNumber = $narrative;
+        }
+
+        $meter = null;
+        if ($meterNumber) {
+            $meter = Meter::where('meter_number', $meterNumber)->first();
+
+            if ($meter && $tillNumber && $meter->vendor) {
+                $vendorTill = trim((string) ($meter->vendor->account_id ?? ''));
+                if ($vendorTill !== '' && $vendorTill !== $tillNumber) {
+                    Log::warning('NCBA: Till number does not match meter vendor', [
+                        'expected_till' => $vendorTill,
+                        'received_till' => $tillNumber,
+                        'meter_number'  => $meterNumber,
+                    ]);
+                }
+            }
+        }
+
+        $accountRef = ($tillNumber && $meterNumber)
+            ? "{$tillNumber}#{$meterNumber}"
+            : ($meterNumber ?? $billRefNumber ?? $narrative);
+
+        return [
+            'meter'       => $meter,
+            'tillNumber'  => $tillNumber,
+            'meterNumber' => $meterNumber,
+            'accountRef'  => $accountRef,
+        ];
+    }
 
     /**
      * Send the NCBA-branded SMS with token(s) to the customer.

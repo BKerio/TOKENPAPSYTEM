@@ -21,9 +21,13 @@ class PrismTokenService
      */
     public function connect()
     {
-        // Replace with environment variables eventually if needed
-        $host = env('PRISM_HOST', "pt.prismcrypto.co.za:29531");
-        $port = env('PRISM_PORT', 29543);
+        $host = env('PRISM_TOKEN_HOST', env('PRISM_HOST', 'pt-vend.prismcrypto.co.za'));
+        $port = (int) env('PRISM_TOKEN_PORT', env('PRISM_PORT', 9443));
+
+        $host = preg_replace('#^https?://#i', '', trim($host));
+        if (preg_match('#^([^:/]+):(\d+)$#', $host, $matches)) {
+            $host = $matches[1];
+        }
 
         Log::info("Connecting to Prism API at {$host}:{$port}");
         
@@ -76,8 +80,8 @@ class PrismTokenService
             $this->connect();
         }
 
-        $user = $username ?? env('PRISM_USERNAME', 'millicom');
-        $pass = $password ?? env('PRISM_PASSWORD', 'RGmWeoEB39dT3JYu');
+        $user = $username ?? env('PRISM_TOKEN_USERNAME', env('PRISM_USERNAME', 'millicom'));
+        $pass = $password ?? env('PRISM_TOKEN_PASSWORD', env('PRISM_PASSWORD', 'RGmWeoEB39dT3JYu'));
 
         try {
             $signInResp = $this->client->signInWithPassword(
