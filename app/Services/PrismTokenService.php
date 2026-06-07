@@ -22,7 +22,7 @@ class PrismTokenService
     public function connect()
     {
         // Replace with environment variables eventually if needed
-        $host = env('PRISM_HOST', "https://pt.prismcrypto.co.za:29531/");
+        $host = env('PRISM_HOST', "pt.prismcrypto.co.za:29531");
         $port = env('PRISM_PORT', 29543);
 
         Log::info("Connecting to Prism API at {$host}:{$port}");
