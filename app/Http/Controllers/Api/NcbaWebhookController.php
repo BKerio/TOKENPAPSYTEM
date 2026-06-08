@@ -25,7 +25,7 @@ class NcbaWebhookController extends Controller
      *   "TransID": "UDR7J243QA",
      *   "TransAmount": "40.0",
      *   "BusinessShortCode": "880100",
-     *   "BillRefNumber": "56TYR56",
+     *   "BillRefNumber": "218262",
      *   "Narrative": "47500162848",
      *   "Mobile": "254722127450",
      *   "name": "SAYED KOMAIL",
