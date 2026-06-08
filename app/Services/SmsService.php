@@ -99,9 +99,13 @@ class SmsService
             // Check if response indicates success
             $success = $statusOk;
             if (is_array($bodyArray) && isset($bodyArray['success'])) {
-                $success = $bodyArray['success'];
+                $success = (bool) $bodyArray['success'];
             } elseif (is_array($bodyArray) && isset($bodyArray['status']) && $bodyArray['status'] === 'success') {
                 $success = true;
+            } elseif (is_array($bodyArray) && isset($bodyArray['responses'][0]['response-code'])) {
+                $success = (int) $bodyArray['responses'][0]['response-code'] === 200;
+            } elseif (is_array($bodyArray) && isset($bodyArray['responses'][0]['response-description'])) {
+                $success = stripos((string) $bodyArray['responses'][0]['response-description'], 'success') !== false;
             }
 
             return $success;

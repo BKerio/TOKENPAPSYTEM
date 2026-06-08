@@ -42,9 +42,10 @@ return [
     ],
 
     'ncba' => [
-        'username' => env('NCBA_PAYBILL_USERNAME', 'millicom'),
-        'password' => env('NCBA_PAYBILL_PASSWORD', ''),
-        'hash'     => env('NCBA_PAYBILL_HASH', ''),
+        'username'    => env('NCBA_PAYBILL_USERNAME', 'millicom'),
+        'password'    => env('NCBA_PAYBILL_PASSWORD', ''),
+        'hash'        => env('NCBA_PAYBILL_HASH', ''),
+        'webhook_url' => rtrim(env('APP_URL', 'http://localhost'), '/') . '/api/notifications/ncba',
     ],
 
 ];
