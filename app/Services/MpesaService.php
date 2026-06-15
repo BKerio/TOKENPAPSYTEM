@@ -117,7 +117,16 @@ class MpesaService
         $shortcode      = $config['shortcode'] ?? null;
         $tillno         = $config['till_no'] ?? null;
         $passkey        = $this->decryptIfSet($config['passkey'] ?? null);
-        $callbackUrl    = $config['callback_url'] ?? null;
+        $callbackUrl    = $config['callback_url'] ?? $this->callbackUrl;
+        $transactionType = $config['transaction_type'] ?? SystemConfig::getValue('mpesa_transaction_type', 'CustomerBuyGoodsOnline');
+
+        if (!$consumerKey || !$consumerSecret || !$passkey || !$shortcode) {
+            return ['errorMessage' => 'Vendor M-Pesa credentials are incomplete'];
+        }
+
+        if ($transactionType === 'CustomerBuyGoodsOnline' && !$tillno) {
+            return ['errorMessage' => 'Vendor M-Pesa till number is not configured'];
+        }
 
         // Convert M-Pesa number to 2547XXXXXXXX format
         $phone = preg_replace('/^0/', '254', $phone);
@@ -141,7 +150,6 @@ class MpesaService
         $tokenData = $responseToken->json();
         $token = $tokenData['access_token'] ?? null;
 
-        $transactionType = $config['transaction_type'] ?? SystemConfig::getValue('mpesa_transaction_type', 'CustomerBuyGoodsOnline');
         $partyB = ($transactionType === 'CustomerPayBillOnline') ? $shortcode : $tillno;
 
         $reference = substr($reference, 0, 12);
@@ -150,18 +158,18 @@ class MpesaService
             'Password'          => $password,
             'Timestamp'         => $timestamp,
             'TransactionType'   => $transactionType,
-            'Amount'            => $amount,
+            'Amount'            => (int) $amount,
             'PartyA'            => $phone,
             'PartyB'            => $partyB,
             'PhoneNumber'       => $phone,
-            'CallBackURL'       => $this->callbackUrl,
+            'CallBackURL'       => $callbackUrl,
             'AccountReference'  => $reference,
             'TransactionDesc'   => $reference,
         ];
 
         Log::info('Sending STK Push Process Request', [
             'url' => $baseUrl . '/mpesa/stkpush/v1/processrequest',
-            'callback_url' => $this->callbackUrl,
+            'callback_url' => $callbackUrl,
             'reference' => $reference
         ]);
         $response = Http::withToken($token)

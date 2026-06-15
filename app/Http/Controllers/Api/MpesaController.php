@@ -54,12 +54,11 @@ class MpesaController extends Controller
             if ($meter) {
                 Log::info('Meter found for STK Push', ['meter_number' => $reference, 'vendor_id' => $meter->vendor_id]);
                 if ($meter->vendor) {
-                    $vendor = $meter->vendor;
-                    if ($vendor->mpesaConfig) {
-                        $vendorConfig = $vendor->mpesaConfig->toArray();
-                        Log::info('Vendor M-Pesa config found', ['vendor_id' => $vendor->id]);
+                    $vendorConfig = $this->resolveVendorMpesaConfig($meter->vendor);
+                    if ($vendorConfig) {
+                        Log::info('Vendor M-Pesa config found', ['vendor_id' => $meter->vendor->id]);
                     } else {
-                        Log::warning('Vendor found but has no M-Pesa config', ['vendor_id' => $vendor->id]);
+                        Log::warning('Vendor found but has no M-Pesa config', ['vendor_id' => $meter->vendor->id]);
                     }
                 } else {
                     Log::warning('Meter found but has no associated vendor', ['meter_number' => $reference]);
@@ -72,29 +71,25 @@ class MpesaController extends Controller
         if ($vendorConfig) {
             Log::info('Initiating STK Push with vendor-specific config');
 
-            // Validate vendor config has required fields
-            $requiredFields = ['consumer_key', 'consumer_secret', 'passkey'];
-            $type = $vendorConfig['transaction_type'] ?? 'CustomerBuyGoodsOnline';
-
-            if ($type === 'CustomerPayBillOnline') {
-                $requiredFields[] = 'shortcode';
-            } else {
-                $requiredFields[] = 'till_no';
-            }
-
-            foreach ($requiredFields as $field) {
-                if (empty($vendorConfig[$field])) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => "Vendor M-Pesa configuration is incomplete. Missing: $field",
-                    ], 400);
-                }
+            $missingField = $this->firstMissingMpesaField($vendorConfig);
+            if ($missingField) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Vendor M-Pesa configuration is incomplete. Missing: {$missingField}",
+                ], 400);
             }
 
             $response = $this->mpesa->stkPushWithConfig($vendorConfig, $validated['phone'], (float) $validated['amount'], $reference);
-        } else {
+        } elseif ($this->isGlobalMpesaConfigured()) {
             Log::info('Initiating STK Push with global M-Pesa config (fallback)');
             $response = $this->mpesa->stkPush($validated['phone'], (float) $validated['amount'], $reference);
+        } else {
+            Log::error('M-Pesa STK Push unavailable: no vendor config and global config not set');
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'M-Pesa is not configured for this meter. The vendor must add M-Pesa credentials in System Settings.',
+            ], 400);
         }
 
         Log::info('M-Pesa API Response', ['response' => $response]);
@@ -496,6 +491,56 @@ class MpesaController extends Controller
 
             return null;
         }
+    }
+
+    protected function resolveVendorMpesaConfig(Vendor $vendor): ?array
+    {
+        if ($vendor->mpesaConfig) {
+            return $vendor->mpesaConfig->toArray();
+        }
+
+        if (!empty($vendor->mpesa_config) && is_array($vendor->mpesa_config)) {
+            return $vendor->mpesa_config;
+        }
+
+        return null;
+    }
+
+    protected function firstMissingMpesaField(array $config): ?string
+    {
+        $requiredFields = ['consumer_key', 'consumer_secret', 'passkey', 'shortcode'];
+        $type = $config['transaction_type'] ?? 'CustomerBuyGoodsOnline';
+
+        if ($type === 'CustomerBuyGoodsOnline') {
+            $requiredFields[] = 'till_no';
+        }
+
+        foreach ($requiredFields as $field) {
+            if (empty($config[$field])) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    protected function isGlobalMpesaConfigured(): bool
+    {
+        $consumerKey = \App\Models\SystemConfig::getValue('mpesa_consumer_key');
+        $consumerSecret = \App\Models\SystemConfig::getValue('mpesa_consumer_secret');
+        $passkey = \App\Models\SystemConfig::getValue('mpesa_passkey');
+
+        if (!$consumerKey || !$consumerSecret || !$passkey) {
+            return false;
+        }
+
+        foreach ([$consumerKey, $consumerSecret, $passkey] as $value) {
+            if (str_contains((string) $value, 'CHANGE_ME')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
