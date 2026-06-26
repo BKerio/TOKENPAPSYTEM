@@ -21,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
                     'note'    => 'Payment notifications must be sent via POST',
                 ]);
             });
+
+            // Safaricom C2B (direct paybill notifications from M-Pesa)
+            Route::post('/mpesa/c2b/validation', [\App\Http\Controllers\Api\MpesaC2bController::class, 'validation']);
+            Route::post('/mpesa/c2b/confirmation', [\App\Http\Controllers\Api\MpesaC2bController::class, 'confirm']);
         },
     )
     ->withMiddleware(function (Middleware $middleware) {

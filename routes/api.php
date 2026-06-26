@@ -38,6 +38,10 @@ Route::get('/auth/google/redirect', [AuthController::class, 'redirectToGoogle'])
 Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 Route::post('/mpesa/stkpush', [MpesaController::class, 'stkPush']);
 Route::post('/mpesa/callback', [MpesaController::class, 'callback']);
+Route::post('/mpesa/c2b/validation', [\App\Http\Controllers\Api\MpesaC2bController::class, 'validation']);
+Route::post('/mpesa/c2b/confirmation', [\App\Http\Controllers\Api\MpesaC2bController::class, 'confirm']);
+Route::get('/mpesa/c2b/validation', fn () => response()->json(['status' => 'ok', 'endpoint' => 'C2B validation — POST required']));
+Route::get('/mpesa/c2b/confirmation', fn () => response()->json(['status' => 'ok', 'endpoint' => 'C2B confirmation — POST required']));
 Route::get('/mpesa/query/{checkoutRequestId}', [MpesaController::class, 'checkStatus']);
 Route::post('/enquiries', [ContactEnquiryController::class, 'store']);
 Route::post('/register/vendor', [VendorRegistrationController::class, 'register']);

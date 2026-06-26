@@ -16,22 +16,22 @@ class NcbaPaymentService
     }
 
     /**
-     * Process an NCBA paybill payment: store record, vend token, send SMS.
+     * Process a paybill payment: store record, vend token, send SMS.
      */
-    public function processPayment(array $data): array
+    public function processPayment(array $data, string $channel = 'NCBA'): array
     {
         $transID     = $data['TransID'];
         $transAmount = (float) $data['TransAmount'];
         $billRef     = $data['BillRefNumber'] ?? null;
         $narrative   = $data['Narrative'] ?? null;
-        $mobile      = (string) $data['Mobile'];
-        $customerName = $data['name'] ?? 'Customer';
+        $mobile      = (string) ($data['Mobile'] ?? $data['MSISDN'] ?? '');
+        $customerName = $data['name'] ?? $data['FirstName'] ?? 'Customer';
 
         $resolved = $this->resolveMeterFromAccountRef($billRef, $narrative);
         $meter    = $resolved['meter'];
         $meterRef = $resolved['accountRef'];
 
-        Log::info('NCBA: Resolved account reference', [
+        Log::info("{$channel}: Resolved account reference", [
             'bill_ref'     => $billRef,
             'narrative'    => $narrative,
             'till_number'  => $resolved['tillNumber'],
@@ -42,13 +42,13 @@ class NcbaPaymentService
 
         $payment = Payment::create([
             'merchant_request_id'  => null,
-            'checkout_request_id'  => 'NCBA-' . $transID,
+            'checkout_request_id'  => $channel . '-' . $transID,
             'account_reference'    => $meterRef ?? $billRef,
             'phone'                => $mobile,
             'amount'               => $transAmount,
             'mpesa_receipt_number' => $transID,
             'result_code'          => '0',
-            'result_desc'          => 'NCBA Paybill Payment',
+            'result_desc'          => $channel . ' Paybill Payment',
             'status'               => 'confirmed',
         ]);
 
@@ -71,7 +71,7 @@ class NcbaPaymentService
         }
 
         try {
-            Log::info('NCBA: Vending token', [
+            Log::info("{$channel}: Vending token", [
                 'meter_id' => $meter->id,
                 'amount'   => $transAmount,
                 'phone'    => $mobile,
@@ -88,14 +88,14 @@ class NcbaPaymentService
                 'amount'      => $transAmount,
                 'tokens'      => $tokenStrings,
                 'status'      => 'success',
-                'description' => 'NCBA Paybill payment generated ' . count($tokenStrings) . ' token(s).',
+                'description' => $channel . ' Paybill payment generated ' . count($tokenStrings) . ' token(s).',
             ]);
 
             $result['token_generated'] = true;
             $result['tokens'] = $tokenStrings;
             $result['sms_sent'] = $this->paymentSmsService->sendTokenMessage($payment, $meter, $tokenStrings);
 
-            Log::info('NCBA: Token SMS ' . ($result['sms_sent'] ? 'sent' : 'FAILED'), [
+            Log::info("{$channel}: Token SMS " . ($result['sms_sent'] ? 'sent' : 'FAILED'), [
                 'phone'      => $mobile,
                 'transID'    => $transID,
                 'payment_id' => $payment->id,
@@ -121,6 +121,28 @@ class NcbaPaymentService
         }
 
         return $result;
+    }
+
+    public function normalizeC2bPayload(array $data): array
+    {
+        $billRef = $data['BillRefNumber'] ?? null;
+        $narrative = null;
+
+        if ($billRef && str_contains($billRef, '#')) {
+            [$till, $meter] = array_pad(explode('#', $billRef, 2), 2, null);
+            $billRef = trim((string) $till);
+            $narrative = trim((string) $meter);
+        }
+
+        return [
+            'TransID'        => $data['TransID'] ?? null,
+            'TransAmount'    => $data['TransAmount'] ?? null,
+            'BillRefNumber'  => $billRef,
+            'Narrative'      => $narrative,
+            'Mobile'         => $data['MSISDN'] ?? $data['Mobile'] ?? null,
+            'FirstName'      => $data['FirstName'] ?? 'Customer',
+            'BusinessShortCode' => $data['BusinessShortCode'] ?? null,
+        ];
     }
 
     public function isDuplicate(string $transID): bool

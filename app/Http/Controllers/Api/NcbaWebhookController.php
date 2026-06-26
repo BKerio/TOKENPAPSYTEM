@@ -39,12 +39,15 @@ class NcbaWebhookController extends Controller
      */
     public function handle(Request $request)
     {
-        Log::info('NCBA Webhook received', [
-            'ip'      => $request->ip(),
-            'payload' => $request->all(),
-        ]);
+        $data = $this->parsePayload($request);
 
-        $data = $request->all();
+        Log::info('NCBA Webhook received', [
+            'ip'           => $request->ip(),
+            'method'       => $request->method(),
+            'content_type' => $request->header('Content-Type'),
+            'user_agent'   => $request->userAgent(),
+            'payload'      => $data,
+        ]);
 
         $expectedUsername = config('services.ncba.username');
         $expectedPassword = config('services.ncba.password');
@@ -117,5 +120,63 @@ class NcbaWebhookController extends Controller
                 'message' => 'Failed to process transaction',
             ], 500);
         }
+    }
+
+    /**
+     * NCBA may send JSON, form-urlencoded, or mixed field casing.
+     */
+    private function parsePayload(Request $request): array
+    {
+        $data = $request->all();
+
+        if (!empty($data)) {
+            return $this->normalizePayloadKeys($data);
+        }
+
+        $raw = trim((string) $request->getContent());
+        if ($raw === '') {
+            return [];
+        }
+
+        $json = json_decode($raw, true);
+        if (is_array($json)) {
+            return $this->normalizePayloadKeys($json);
+        }
+
+        parse_str($raw, $form);
+        if (is_array($form) && !empty($form)) {
+            return $this->normalizePayloadKeys($form);
+        }
+
+        Log::warning('NCBA Webhook unparsed body', [
+            'raw' => substr($raw, 0, 2000),
+        ]);
+
+        return [];
+    }
+
+    private function normalizePayloadKeys(array $data): array
+    {
+        $map = [
+            'transid'          => 'TransID',
+            'transamount'      => 'TransAmount',
+            'billrefnumber'    => 'BillRefNumber',
+            'narrative'        => 'Narrative',
+            'mobile'           => 'Mobile',
+            'username'         => 'Username',
+            'password'         => 'Password',
+            'hash'             => 'Hash',
+            'businessshortcode'=> 'BusinessShortCode',
+            'transtime'        => 'TransTime',
+            'name'             => 'name',
+        ];
+
+        $normalized = [];
+        foreach ($data as $key => $value) {
+            $lower = strtolower((string) $key);
+            $normalized[$map[$lower] ?? $key] = $value;
+        }
+
+        return $normalized;
     }
 }

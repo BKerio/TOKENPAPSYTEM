@@ -185,6 +185,56 @@ class MpesaService
         return $response->json() ?: ['errorMessage' => 'Empty or invalid response from M-Pesa API', 'status' => $response->status()];
     }
 
+    /**
+     * Register C2B validation and confirmation URLs with Safaricom Daraja.
+     * Required once per paybill shortcode so paybill payments auto-notify TokenPap.
+     */
+    public function registerC2bUrls(
+        string $shortCode,
+        string $confirmationUrl,
+        string $validationUrl,
+        ?array $credentials = null
+    ): array {
+        $env = $credentials['env'] ?? SystemConfig::getValue('mpesa_env', 'sandbox');
+        $baseUrl = $env === 'live'
+            ? 'https://api.safaricom.co.ke'
+            : 'https://sandbox.safaricom.co.ke';
+
+        $consumerKey = $credentials['consumer_key'] ?? SystemConfig::getValue('mpesa_consumer_key');
+        $consumerSecret = $credentials['consumer_secret'] ?? SystemConfig::getValue('mpesa_consumer_secret');
+
+        if ($credentials) {
+            $consumerKey = $this->decryptIfSet($consumerKey);
+            $consumerSecret = $this->decryptIfSet($consumerSecret);
+        }
+
+        $tokenResponse = Http::withBasicAuth(trim((string) $consumerKey), trim((string) $consumerSecret))
+            ->get($baseUrl . '/oauth/v1/generate?grant_type=client_credentials');
+
+        if ($tokenResponse->failed()) {
+            return $tokenResponse->json() ?: ['errorMessage' => 'Failed to generate access token for C2B registration'];
+        }
+
+        $token = $tokenResponse->json()['access_token'] ?? null;
+
+        $payload = [
+            'ShortCode'       => $shortCode,
+            'ResponseType'    => 'Completed',
+            'ConfirmationURL' => $confirmationUrl,
+            'ValidationURL'   => $validationUrl,
+        ];
+
+        Log::info('Registering M-Pesa C2B URLs', $payload);
+
+        $response = Http::withToken($token)
+            ->post($baseUrl . '/mpesa/c2b/v1/registerurl', $payload);
+
+        return $response->json() ?: [
+            'errorMessage' => 'Empty response from C2B register URL',
+            'status'       => $response->status(),
+        ];
+    }
+
     private function decryptIfSet(?string $value): ?string
     {
         if ($value) {
