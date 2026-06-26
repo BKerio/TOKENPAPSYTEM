@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -10,6 +11,17 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            // NCBA often registers /notifications/ncba (without /api prefix)
+            Route::post('/notifications/ncba', [\App\Http\Controllers\Api\NcbaWebhookController::class, 'handle']);
+            Route::get('/notifications/ncba', function () {
+                return response()->json([
+                    'status'  => 'ok',
+                    'message' => 'TokenPap NCBA webhook endpoint is reachable',
+                    'note'    => 'Payment notifications must be sent via POST',
+                ]);
+            });
+        },
     )
     ->withMiddleware(function (Middleware $middleware) {
         //

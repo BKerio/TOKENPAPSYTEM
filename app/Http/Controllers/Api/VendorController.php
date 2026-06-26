@@ -290,6 +290,9 @@ class VendorController extends Controller
                 $mpesaData['vendor_id'] = $vendor->id;
                 MpesaConfig::create($mpesaData);
             }
+
+            // Keep legacy embedded field in sync so old code paths cannot read stale data
+            $vendor->update(['mpesa_config' => null]);
         }
 
         return response()->json([

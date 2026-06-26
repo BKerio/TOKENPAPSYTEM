@@ -79,6 +79,8 @@ class MpesaConfigController extends Controller
             MpesaConfig::create($configData);
         }
 
+        $vendor->update(['mpesa_config' => null]);
+
         return response()->json([
             'status' => 200,
             'message' => 'MPESA configuration updated successfully',

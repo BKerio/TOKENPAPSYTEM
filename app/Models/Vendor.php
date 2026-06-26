@@ -40,7 +40,7 @@ class Vendor extends Model
      */
     public function mpesaConfig()
     {
-        return $this->hasOne(MpesaConfig::class);
+        return $this->hasOne(MpesaConfig::class, 'vendor_id', 'id');
     }
 
     /**
@@ -48,7 +48,7 @@ class Vendor extends Model
      */
     public function smsConfig()
     {
-        return $this->hasOne(SmsConfig::class);
+        return $this->hasOne(SmsConfig::class, 'vendor_id', 'id');
     }
 
     /**

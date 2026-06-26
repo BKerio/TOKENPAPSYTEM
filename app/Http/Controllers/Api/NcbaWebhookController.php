@@ -55,7 +55,13 @@ class NcbaWebhookController extends Controller
             ($data['Password'] ?? null) !== $expectedPassword ||
             ($data['Hash'] ?? null)     !== $expectedHash
         ) {
-            Log::warning('NCBA Webhook authentication failed', ['ip' => $request->ip()]);
+            Log::warning('NCBA Webhook authentication failed', [
+                'ip'              => $request->ip(),
+                'username_match'  => ($data['Username'] ?? null) === $expectedUsername,
+                'password_match'  => ($data['Password'] ?? null) === $expectedPassword,
+                'hash_match'      => ($data['Hash'] ?? null) === $expectedHash,
+                'received_keys'   => array_keys($data),
+            ]);
 
             return response()->json([
                 'status'  => 'error',

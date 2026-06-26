@@ -367,14 +367,15 @@ class SystemConfigController extends Controller
         $response = null;
         $vendorConfig = null;
 
-        // 1. If a vendor_email is provided, prefer that
+        // 1. If a vendor_email is provided, prefer that vendor's dedicated config record
         if ($request->filled('vendor_email')) {
             $vendor = Vendor::whereHas('user', function ($q) use ($request) {
                 $q->where('email', $request->input('vendor_email'));
             })->first();
 
-            if ($vendor && $vendor->mpesa_config) {
-                $vendorConfig = $vendor->mpesa_config;
+            if ($vendor) {
+                $vendorConfig = $vendor->mpesaConfig?->toArray()
+                    ?? (is_array($vendor->mpesa_config) ? $vendor->mpesa_config : null);
             }
         }
 

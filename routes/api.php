@@ -45,6 +45,13 @@ Route::get('/tokens/search', [TokenController::class, 'searchPublic']);
 
 // NCBA Paybill webhook (public — called by NCBA/TokenPap server)
 Route::post('/notifications/ncba', [NcbaWebhookController::class, 'handle']);
+Route::get('/notifications/ncba', function () {
+    return response()->json([
+        'status'  => 'ok',
+        'message' => 'TokenPap NCBA webhook endpoint is reachable',
+        'note'    => 'Payment notifications must be sent via POST',
+    ]);
+});
 
 // Protected routes (allow both default user tokens and admin tokens)
 Route::middleware('auth:sanctum')->group(function () {
