@@ -37,7 +37,6 @@ Route::post('/customer/login-otp', [AuthController::class, 'customerLoginOtp']);
 Route::get('/auth/google/redirect', [AuthController::class, 'redirectToGoogle']);
 Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 Route::post('/mpesa/stkpush', [MpesaController::class, 'stkPush']);
-Route::post('/paybill/claim', [\App\Http\Controllers\Api\PaybillController::class, 'claim']);
 Route::post('/mpesa/callback', [MpesaController::class, 'callback']);
 Route::post('/mpesa/c2b/validation', [\App\Http\Controllers\Api\MpesaC2bController::class, 'validation']);
 Route::post('/mpesa/c2b/confirmation', [\App\Http\Controllers\Api\MpesaC2bController::class, 'confirm']);
