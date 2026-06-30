@@ -15,9 +15,11 @@ use App\Http\Controllers\Api\TokenController;
 use App\Http\Controllers\Api\MpesaConfigController;
 use App\Http\Controllers\Api\SmsConfigController;
 use App\Http\Controllers\Api\LandlordController;
+use App\Http\Controllers\Api\PropertyController;
 use App\Http\Controllers\Api\VendorRegistrationController;
 use App\Http\Controllers\Api\ContactEnquiryController;
 use App\Http\Controllers\Api\NcbaWebhookController;
+use App\Http\Controllers\Api\PropertyHierarchyController;
 
 /*
 |--------------------------------------------------------------------------
@@ -104,9 +106,35 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Landlord profile (self)
     Route::get('landlord/profile', [LandlordController::class, 'getProfile']);
+    Route::get('landlord/meters', [LandlordController::class, 'getMeters']);
+    Route::get('admin/landlords/{landlord}/meters', [LandlordController::class, 'adminMeters']);
+    Route::put('admin/landlords/{landlord}/meters', [LandlordController::class, 'syncMeters']);
     
     // Landlord properties
     Route::apiResource('landlord/properties', PropertyController::class);
+
+    // Landlord property hierarchy (Zones → Routes → Streets → Units) & tenants
+    Route::get('landlord/hierarchy/summary', [PropertyHierarchyController::class, 'summary']);
+    Route::get('landlord/properties/{property}/hierarchy', [PropertyHierarchyController::class, 'hierarchy']);
+    Route::post('landlord/properties/{property}/zones', [PropertyHierarchyController::class, 'storeZone']);
+    Route::put('landlord/zones/{zone}', [PropertyHierarchyController::class, 'updateZone']);
+    Route::delete('landlord/zones/{zone}', [PropertyHierarchyController::class, 'destroyZone']);
+    Route::post('landlord/zones/{zone}/routes', [PropertyHierarchyController::class, 'storeRoute']);
+    Route::put('landlord/routes/{route}', [PropertyHierarchyController::class, 'updateRoute']);
+    Route::delete('landlord/routes/{route}', [PropertyHierarchyController::class, 'destroyRoute']);
+    Route::post('landlord/routes/{route}/streets', [PropertyHierarchyController::class, 'storeStreet']);
+    Route::put('landlord/streets/{street}', [PropertyHierarchyController::class, 'updateStreet']);
+    Route::delete('landlord/streets/{street}', [PropertyHierarchyController::class, 'destroyStreet']);
+    Route::post('landlord/units', [PropertyHierarchyController::class, 'storeUnit']);
+    Route::post('landlord/properties/{property}/units/bulk', [PropertyHierarchyController::class, 'storeBulkUnits']);
+    Route::put('landlord/properties/{property}/unit-meters', [PropertyHierarchyController::class, 'syncUnitMeters']);
+    Route::put('landlord/units/{unit}', [PropertyHierarchyController::class, 'updateUnit']);
+    Route::put('landlord/units/{unit}/meter', [PropertyHierarchyController::class, 'assignUnitMeter']);
+    Route::delete('landlord/units/{unit}', [PropertyHierarchyController::class, 'destroyUnit']);
+    Route::get('landlord/tenants', [PropertyHierarchyController::class, 'indexTenants']);
+    Route::post('landlord/tenants', [PropertyHierarchyController::class, 'storeTenant']);
+    Route::put('landlord/tenants/{tenant}', [PropertyHierarchyController::class, 'updateTenant']);
+    Route::delete('landlord/tenants/{tenant}', [PropertyHierarchyController::class, 'destroyTenant']);
 
     // System Configuration (admin)
     Route::prefix('admin/system-config')->group(function () {

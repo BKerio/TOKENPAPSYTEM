@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Landlord;
+use App\Models\Meter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -30,6 +31,70 @@ class LandlordController extends Controller
         return response()->json([
             'status'   => 200,
             'landlord' => $landlord,
+        ]);
+    }
+
+    /**
+     * Meters assigned to the authenticated landlord.
+     */
+    public function getMeters(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user || $user->role !== 'landlord') {
+            return response()->json(['status' => 403, 'message' => 'Landlord access only.'], 403);
+        }
+
+        $landlord = Landlord::where('user_id', $user->id)->first();
+
+        if (!$landlord) {
+            return response()->json(['status' => 404, 'message' => 'Landlord profile not found.'], 404);
+        }
+
+        $meters = Meter::where('landlord_id', $landlord->id)->orderBy('meter_number')->get();
+
+        return response()->json(['status' => 200, 'meters' => $meters]);
+    }
+
+    /**
+     * List meters assigned to a landlord (admin).
+     */
+    public function adminMeters($id)
+    {
+        $landlord = Landlord::findOrFail($id);
+        $meters = Meter::where('landlord_id', $landlord->id)->orderBy('meter_number')->get();
+
+        return response()->json(['status' => 200, 'landlord' => $landlord, 'meters' => $meters]);
+    }
+
+    /**
+     * Sync meter assignments for a landlord (admin).
+     */
+    public function syncMeters(Request $request, $id)
+    {
+        $landlord = Landlord::findOrFail($id);
+
+        $validated = $request->validate([
+            'meter_ids' => 'present|array',
+            'meter_ids.*' => 'string',
+        ]);
+
+        $meterIds = array_values(array_unique($validated['meter_ids']));
+
+        Meter::where('landlord_id', (string) $landlord->id)
+            ->when(count($meterIds) > 0, fn ($q) => $q->whereNotIn('_id', $meterIds))
+            ->update(['landlord_id' => null]);
+
+        if (!empty($meterIds)) {
+            Meter::whereIn('_id', $meterIds)->update(['landlord_id' => (string) $landlord->id]);
+        }
+
+        $meters = Meter::where('landlord_id', $landlord->id)->orderBy('meter_number')->get();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Meter assignments updated successfully',
+            'meters' => $meters,
         ]);
     }
 

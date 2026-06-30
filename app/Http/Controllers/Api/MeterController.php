@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Meter;
 use App\Models\User;
+use App\Models\Landlord;
 use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -35,7 +36,7 @@ class MeterController extends Controller
         }
 
         $user = Auth::user();
-        $query = Meter::with('vendor');
+        $query = Meter::with(['vendor', 'landlord']);
 
         $role = $user->role ?? null;
 
@@ -52,6 +53,18 @@ class MeterController extends Controller
                 ]);
             }
             $query->where('vendor_id', (string) $vendor->id);
+        } elseif ($role === 'landlord') {
+            $landlord = Landlord::where('user_id', $user->id)->first();
+            if (!$landlord) {
+                return response()->json([
+                    'data' => [],
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => (int) $request->get('per_page', 10),
+                    'total' => 0,
+                ]);
+            }
+            $query->where('landlord_id', (string) $landlord->id);
         }
 
         // Search by meter number
@@ -79,6 +92,9 @@ class MeterController extends Controller
         if (isset($input['vendor_id']) && $input['vendor_id'] === '') {
             $input['vendor_id'] = null;
         }
+        if (isset($input['landlord_id']) && $input['landlord_id'] === '') {
+            $input['landlord_id'] = null;
+        }
         // Pricing is set by the vendor, not admin. Default to 0 when creating.
         if (!array_key_exists('price_per_unit', $input) || $input['price_per_unit'] === '' || $input['price_per_unit'] === null) {
             $input['price_per_unit'] = 0;
@@ -89,6 +105,7 @@ class MeterController extends Controller
             'initial_reading' => 'numeric|min:0',
             'price_per_unit' => 'numeric|min:0',
             'vendor_id' => 'nullable|exists:vendors,_id',
+            'landlord_id' => 'nullable|exists:landlords,_id',
             'status' => 'string|in:active,inactive,maintenance',
             'sgc' => 'nullable|integer',
             'krn' => 'nullable|integer',
@@ -101,7 +118,7 @@ class MeterController extends Controller
 
         return response()->json([
             'message' => 'Meter created successfully',
-            'meter' => $meter->load('vendor')
+            'meter' => $meter->load(['vendor', 'landlord'])
         ], 201);
     }
 
@@ -111,11 +128,18 @@ class MeterController extends Controller
     public function show(string $id)
     {
         $user = Auth::user();
-        $meter = Meter::with(['vendor', 'customers'])->findOrFail($id);
+        $meter = Meter::with(['vendor', 'landlord', 'customers'])->findOrFail($id);
 
         if ($user->role === 'vendor') {
             $vendor = Vendor::where('user_id', $user->id)->first();
             if (!$vendor || (string) $meter->vendor_id !== (string) $vendor->id) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        }
+
+        if ($user->role === 'landlord') {
+            $landlord = Landlord::where('user_id', $user->id)->first();
+            if (!$landlord || (string) $meter->landlord_id !== (string) $landlord->id) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
         }
@@ -139,15 +163,26 @@ class MeterController extends Controller
             }
         }
 
+        if ($user->role === 'landlord') {
+            $landlord = Landlord::where('user_id', $user->id)->first();
+            if (!$landlord || (string) $meter->landlord_id !== (string) $landlord->id) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        }
+
         $input = $request->all();
         if (array_key_exists('vendor_id', $input) && $input['vendor_id'] === '') {
             $input['vendor_id'] = null;
+        }
+        if (array_key_exists('landlord_id', $input) && $input['landlord_id'] === '') {
+            $input['landlord_id'] = null;
         }
         $validated = validator($input, [
             'meter_number' => 'sometimes|string|unique:meters,meter_number,' . $id . ',_id',
             'type' => 'sometimes|string',
             'price_per_unit' => 'sometimes|numeric|min:0',
             'vendor_id' => 'sometimes|nullable|exists:vendors,_id',
+            'landlord_id' => 'sometimes|nullable|exists:landlords,_id',
             'status' => 'sometimes|string|in:active,inactive,maintenance',
             'sgc' => 'sometimes|nullable|integer',
             'krn' => 'sometimes|nullable|integer',
@@ -169,7 +204,7 @@ class MeterController extends Controller
 
         return response()->json([
             'message' => 'Meter updated successfully',
-            'meter' => $meter->load('vendor')
+            'meter' => $meter->load(['vendor', 'landlord'])
         ]);
     }
 

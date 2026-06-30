@@ -27,4 +27,9 @@ class Landlord extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function meters()
+    {
+        return $this->hasMany(Meter::class);
+    }
 }

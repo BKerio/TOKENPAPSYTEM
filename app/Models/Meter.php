@@ -14,6 +14,7 @@ class Meter extends DocumentModel
 
     protected $fillable = [
         'vendor_id',
+        'landlord_id',
         'meter_number',
         'type',
         'initial_reading',
@@ -29,6 +30,11 @@ class Meter extends DocumentModel
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function landlord()
+    {
+        return $this->belongsTo(Landlord::class);
     }
 
     public function customers()
