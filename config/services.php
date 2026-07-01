@@ -44,7 +44,6 @@ return [
     'ncba' => [
         'username'          => env('NCBA_PAYBILL_USERNAME', 'millicom'),
         'password'          => env('NCBA_PAYBILL_PASSWORD', ''),
-        'hash'              => env('NCBA_PAYBILL_HASH', ''),
         'paybill_shortcode' => env('NCBA_PAYBILL_SHORTCODE', '880100'),
         'webhook_url'       => rtrim(env('APP_URL', 'http://localhost'), '/') . '/notifications/ncba',
         'c2b_validation_url' => rtrim(env('APP_URL', 'http://localhost'), '/') . '/api/mpesa/c2b/validation',

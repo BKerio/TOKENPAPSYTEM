@@ -30,8 +30,7 @@ class NcbaWebhookController extends Controller
      *   "Mobile": "254722127450",
      *   "name": "SAYED KOMAIL",
      *   "Username": "millicom",
-     *   "Password": "...",
-     *   "Hash": "..."
+     *   "Password": "..."
      * }
      *
      * Account format: TillNumber#MeterNumber
@@ -51,19 +50,16 @@ class NcbaWebhookController extends Controller
 
         $expectedUsername = config('services.ncba.username');
         $expectedPassword = config('services.ncba.password');
-        $expectedHash     = config('services.ncba.hash');
 
         if (
             ($data['Username'] ?? null) !== $expectedUsername ||
-            ($data['Password'] ?? null) !== $expectedPassword ||
-            ($data['Hash'] ?? null)     !== $expectedHash
+            ($data['Password'] ?? null) !== $expectedPassword
         ) {
             Log::warning('NCBA Webhook authentication failed', [
-                'ip'              => $request->ip(),
-                'username_match'  => ($data['Username'] ?? null) === $expectedUsername,
-                'password_match'  => ($data['Password'] ?? null) === $expectedPassword,
-                'hash_match'      => ($data['Hash'] ?? null) === $expectedHash,
-                'received_keys'   => array_keys($data),
+                'ip'             => $request->ip(),
+                'username_match' => ($data['Username'] ?? null) === $expectedUsername,
+                'password_match' => ($data['Password'] ?? null) === $expectedPassword,
+                'received_keys'  => array_keys($data),
             ]);
 
             return response()->json([
